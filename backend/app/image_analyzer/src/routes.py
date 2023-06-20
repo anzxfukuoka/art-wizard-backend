@@ -1,12 +1,11 @@
-from flask import Flask, request, Response
-from flask import current_app
+from flask import request, Response
 import logging
 import jsonpickle
 import numpy as np
 import cv2
 
 from app.image_analyzer import bp
-from app.image_analyzer.image_processing import extract_art_data
+from app.image_analyzer.src.image_processing import extract_art_data
 
 LOG = logging.getLogger(__name__)
 

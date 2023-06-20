@@ -40,10 +40,10 @@ RUN rm -rf /var/lib/apt/lists/*
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Port
-EXPOSE 5000
+EXPOSE ${PORT}
 
 # Define environment variables
 ENV Name GI-tool-backend
 
 # Run application
-CMD ["flask", "run"]
+CMD ["sh", "-c", "flask", "run", "--app=app", "--host=$HOST", "--port=$PORT"]

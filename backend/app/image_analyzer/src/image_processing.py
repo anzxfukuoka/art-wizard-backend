@@ -4,14 +4,15 @@ import numpy as np
 import argparse
 import time
 import cv2
+import os
 
-import pytesseract
-
+from app import image_analyzer
 import re
 import math
 
+dir = os.path.dirname(image_analyzer.__file__)
 # load templates
-star_template = cv2.imread(f"./data/star_template.png", cv2.IMREAD_COLOR)
+star_template = cv2.imread(os.path.join(dir, './data/star_template.png'), cv2.IMREAD_COLOR)
 
 
 def extract_art_data(image: np.ndarray):
@@ -23,16 +24,16 @@ def extract_art_data(image: np.ndarray):
 
 def _preprocess_image(image: np.array):
     resized = _resize(image, (640, 640))
-    star_template_edges = _get_edges(star_template)
-    resized_edges = _get_edges(resized)
-    result = _get_starts(resized_edges, star_template_edges)
+    star_template_gray = cv2.cvtColor(star_template, cv2.COLOR_BGR2GRAY)
+    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    result = _find_template(image_gray, star_template_gray)
     return result
 
 
-def _get_starts(image: np.array, star_template: np.array):
+def _find_template(image: np.array, star_template: np.array):
     search_result = cv2.matchTemplate(image, star_template, cv2.TM_CCOEFF_NORMED)
 
-    #h, w, channels = star_template.shape
+    # h, w, channels = star_template.shape
     h, w = star_template.shape
 
     threshold = 0.4
@@ -44,8 +45,10 @@ def _get_starts(image: np.array, star_template: np.array):
 
     tst_image_copy = image.copy()
 
-    # found stars
-    star_points = []
+    # found template
+    # doubles detection
+    templates_points = []
+    found_templates = []
 
     def distance(pt1, pt2):
         x1, y1 = pt1
@@ -56,19 +59,20 @@ def _get_starts(image: np.array, star_template: np.array):
         found_pt = True
 
         # removing doubles
-        for star_pt in star_points:
-            if distance(pt, star_pt) < doublicates_radius_threshold:
+        for template_pt in templates_points:
+            if distance(pt, template_pt) < doublicates_radius_threshold:
                 found_pt = False
                 break
 
         if found_pt:
-            star_points.append(pt)
+            templates_points.append(pt)
             top_left = pt
             bottom_right = (pt[0] + w, pt[1] + h)
             cv2.rectangle(tst_image_copy, top_left, bottom_right, (255, 255, 255), 2)
+            found_templates.append((top_left, bottom_right, w, h))
 
-    print("starts count", len(star_points), len(loc[0]))
-    return len(star_points)
+    print("count", len(found_templates), len(loc[0]))
+    return len(found_templates)
 
 
 def _get_edges(image: np.array):
