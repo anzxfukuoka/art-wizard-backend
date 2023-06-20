@@ -5,21 +5,21 @@ import jsonpickle
 import numpy as np
 import cv2
 
-from app.main import bp
-from app.main.image_processing import extract_art_data
+from app.image_analyzer import bp
+from app.image_analyzer.image_processing import extract_art_data
 
 LOG = logging.getLogger(__name__)
 
 @bp.route('/')
 def index():
-    return 'This is The Main Blueprint'
+    return 'This is The {} Blueprint'.format(__name__)
 
 
-@bp.route('/test', methods=['POST'])
-def test():
+@bp.route('/get_art_data', methods=['POST'])
+def get_art_data():
     r = request
     # convert string of image data to uint8
-    nparr = np.fromstring(r.data, np.uint8)
+    nparr = np.frombuffer(r.data, np.uint8)
     # decode image
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
