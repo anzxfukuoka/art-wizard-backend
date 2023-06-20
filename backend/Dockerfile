@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM ubuntu:18.04
+FROM ubuntu:latest
 
 # Set the working directory in the container
 WORKDIR ./app
@@ -12,17 +12,29 @@ RUN apt-get update && \
     apt-get install -y software-properties-common && \
     rm -rf /var/lib/apt/lists/*
 
+# Install CV2 dependencies
+RUN apt-get install ffmpeg libsm6 libxext6
+
 # Install Python 3 and Tesseract
-RUN add-apt-repository "ppa:alex-p/tesseract-ocr"
-RUN apt-get update && \
-    apt-get install -y python3-pip python3-dev && \
+
+# RUN add-apt-repository "ppa:alex-p/tesseract-ocr" && \
+#    apt-get update
+
+RUN apt-get install -y python3-pip python3-dev && \
     apt-get install -y tesseract-ocr libtesseract-dev
+
+# Install tesseract languages
+RUN apt-get install tesseract-ocr-rus
+
+# Download EAST model
+RUN wget -O "./app/data/frozen_east_text_detection.tar.gz" "https://www.dropbox.com/s/r2ingd0l3zt8hxs/frozen_east_text_detection.tar.gz?dl=1"
+RUN tar -xvf "./app/data/frozen_east_text_detection.tar.gz"
 
 # Install any needed packages specified in requirements.txt
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Make port 80 available to the world outside this container
-EXPOSE 80
+# Port
+EXPOSE 5000
 
 # Define environment variable
 ENV Name GI-tool-backend
