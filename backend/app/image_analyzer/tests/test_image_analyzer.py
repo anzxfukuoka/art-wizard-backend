@@ -1,6 +1,7 @@
 import cv2
 import os
 from app.image_analyzer import tests
+import jsonpickle
 
 def test_status_code(client):
     response = client.get("/image_analyzer/")
@@ -21,3 +22,7 @@ def test_get_art_data(client):
     response = client.post("/image_analyzer/get_art_data", data=img_encoded.tobytes())
     # assert b"<h2>Hello, World!</h2>" in response.data
     assert response.status_code == 200
+
+    data = jsonpickle.decode(response.data)
+
+    assert data["result"] == 5

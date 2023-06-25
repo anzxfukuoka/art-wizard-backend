@@ -1,130 +1,119 @@
 # from imutils.object_detection import non_max_suppression
 # from google.colab.patches import cv2_imshow
+from abc import ABC
+
 import numpy as np
 import argparse
 import time
 import cv2
 import os
+from imutils.object_detection import non_max_suppression
 
 from app import image_analyzer
-import re
-import math
+from app.image_analyzer.src.utils import *
 
-dir = os.path.dirname(image_analyzer.__file__)
-# load templates
-star_template = cv2.imread(os.path.join(dir, './data/star_template.png'), cv2.IMREAD_COLOR)
+import logging
 
-
-def extract_art_data(image: np.ndarray):
-    # east: image height and width should be multiple of 32
-    pp_image = _preprocess_image(image)
-
-    return pp_image
+logger = logging.getLogger(__name__)
 
 
-def _preprocess_image(image: np.array):
-    resized = _resize(image, (640, 640))
-    star_template_gray = cv2.cvtColor(star_template, cv2.COLOR_BGR2GRAY)
-    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    result = _find_template(image_gray, star_template_gray)
-    return result
+class ArtExtractor:
+    def __init__(self):
+        # east model requires image height and width = multiple of 32
+        self.image_size = 640
+        self.star_template_size = 32
+
+        # load templates
+        data_folder = os.path.dirname(image_analyzer.__file__)
+        self.star_template = cv2.imread(os.path.join(data_folder, './data/star_template.png'), cv2.IMREAD_COLOR)
+
+        # templates preprocessing
+        self.star_template = self._preprocess_image(self.star_template, self.star_template_size)
+
+    def art_from_image(self, image: np.ndarray):
+
+        # image preprocessing
+        preprocessed_image = self._preprocess_image(image, self.image_size)
+
+        # Stars detection
+
+        found_stars = self._find_template(preprocessed_image, self.star_template)
+        stars_count = len(found_stars)
+
+        if stars_count < 3 or stars_count > 5:
+            logger.error("unexpected stars count")
+
+        if stars_count == 0:
+            raise Exception("No stars detected")
+
+        # Divide main and sub stats images
+
+        star_x, star_y, star_xw, star_yh = found_stars[0]
+
+        # orig_h, orig_w, orig_channels = tst_image.shape
+
+        image_x, image_y = (0, 0)
+        image_h, image_w = preprocessed_image.shape
+
+        image_crop_upper = crop(preprocessed_image, image_x, image_y, image_w, star_y)
+        image_crop_middle = crop(preprocessed_image, image_x, star_y, image_w, star_yh - star_y)
+        image_crop_lower = crop(preprocessed_image, image_x, star_yh, image_w, image_h - star_yh)
+
+        return None
+
+    def _preprocess_image(self, image: np.ndarray, image_size):
+
+        resized = resize_image(image, (image_size, image_size))
+        grayscale = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(grayscale, (3, 3), 0)
+
+        return blur
+
+    def _find_template(self, image: np.array, template: np.array, detection_threshold=0.82, overlap_threshold=.4):
+        """
+        :param image: cv2 image
+        :param template: cv2 image
+        :param detection_threshold: template detection threshold
+        :param overlap_threshold: multiple objects detection threshold
+        :return: a list of sets, each of which represents the rect of the found template: (top_left, bottom_right, w, h)
+        """
+        match = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
+
+        # Select rectangles with
+        # confidence greater than threshold
+        (y_points, x_points) = np.where(match >= detection_threshold)
+        W, H = template.shape
+
+        # initialize our list of bounding boxes
+        boxes = list()
+
+        # store co-ordinates of each bounding box
+        # we'll create a new list by looping
+        # through each pair of points
+        for (x, y) in zip(x_points, y_points):
+            # update our list of boxes
+            boxes.append((x, y, x + W, y + H))
+
+        # apply non-maxima suppression to the rectangles
+        # this will create a single bounding box
+        # for each object
+        boxes = non_max_suppression(np.array(boxes), overlapThresh=overlap_threshold)
+
+        ''' draw boxes
+        # loop over the final bounding boxes
+        for (x1, y1, x2, y2) in boxes:
+            # draw the bounding box on the image
+            cv2.rectangle(image, (x1, y1), (x2, y2),
+                          (255, 0, 0), 3)
+        
+        '''
+
+        return boxes
 
 
-def _find_template(image: np.array, star_template: np.array):
-    search_result = cv2.matchTemplate(image, star_template, cv2.TM_CCOEFF_NORMED)
+if __name__ == '__main__':
+    path = os.path.join(r"C:\MISC\Dev\py\genshin_tool_3.0\backend\app\image_analyzer\tests\data\img.png")
+    timg = cv2.imread(path, cv2.IMREAD_COLOR)
 
-    # h, w, channels = star_template.shape
-    h, w = star_template.shape
-
-    threshold = 0.4
-    doublicates_radius_threshold = w * 0.6
-
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(search_result)
-
-    loc = np.where(search_result >= threshold)
-
-    tst_image_copy = image.copy()
-
-    # found template
-    # doubles detection
-    templates_points = []
-    found_templates = []
-
-    def distance(pt1, pt2):
-        x1, y1 = pt1
-        x2, y2 = pt2
-        return math.sqrt(math.pow(x1 - x2, 2) + math.pow(y1 - y2, 2))
-
-    for pt in zip(*loc[::-1]):
-        found_pt = True
-
-        # removing doubles
-        for template_pt in templates_points:
-            if distance(pt, template_pt) < doublicates_radius_threshold:
-                found_pt = False
-                break
-
-        if found_pt:
-            templates_points.append(pt)
-            top_left = pt
-            bottom_right = (pt[0] + w, pt[1] + h)
-            cv2.rectangle(tst_image_copy, top_left, bottom_right, (255, 255, 255), 2)
-            found_templates.append((top_left, bottom_right, w, h))
-
-    print("count", len(found_templates), len(loc[0]))
-    return len(found_templates)
-
-
-def _get_edges(image: np.array):
-    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    image_grad_x = cv2.Sobel(image_gray, cv2.CV_64F, 1, 0, ksize=3)
-    image_grad_y = cv2.Sobel(image_gray, cv2.CV_64F, 0, 1, ksize=3)
-    image_edges = cv2.addWeighted(image_grad_x, 1, image_grad_y, 1, 0)
-    image_edges = image_edges.astype(np.float32)
-
-    return image_edges
-
-
-def _resize(image: np.ndarray, size: tuple):
-    """
-    img -> cv2 image
-    size -> tuple(x, y)
-    """
-    h, w = image.shape[:2]
-    sh, sw = size
-
-    # interpolation method
-    if h > sh or w > sw:
-        interp = cv2.INTER_AREA  # shrinking image
-    else:
-        interp = cv2.INTER_CUBIC  # stretching image
-
-    # aspect ratio of image
-    aspect = w / h
-
-    # compute scaling and pad sizing
-    if aspect > 1:
-        # horizontal image
-        new_w = sw
-        new_h = np.round(new_w / aspect).astype(int)
-        pad_vert = (sh - new_h) / 2
-        pad_top, pad_bot = np.floor(pad_vert).astype(int), np.ceil(pad_vert).astype(int)
-        pad_left, pad_right = 0, 0
-    elif aspect < 1:
-        # vertical image
-        new_h = sh
-        new_w = np.round(new_h * aspect).astype(int)
-        pad_horz = (sw - new_w) / 2
-        pad_left, pad_right = np.floor(pad_horz).astype(int), np.ceil(pad_horz).astype(int)
-        pad_top, pad_bot = 0, 0
-    else:
-        # square image
-        new_h, new_w = sh, sw
-        pad_left, pad_right, pad_top, pad_bot = 0, 0, 0, 0
-
-    # scale and pad
-    scaled_img = cv2.resize(image, (new_w, new_h), interpolation=interp)
-    scaled_img = cv2.copyMakeBorder(scaled_img, pad_top, pad_bot, pad_left, pad_right,
-                                    borderType=cv2.BORDER_CONSTANT)
-
-    return scaled_img
+    extractor = ArtExtractor()
+    result = extractor.art_from_image(timg)

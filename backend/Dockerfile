@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 FROM ubuntu:latest
 
-# Set the working directory in the container
-WORKDIR ./app
 # Copy the current directory contents into the container
-COPY . .
+COPY . ./project
+
+# Set the working directory in the container
+WORKDIR ./project
 
 # Install software-properties-common
 # RUN apt clean
@@ -46,4 +47,6 @@ EXPOSE ${PORT}
 ENV Name GI-tool-backend
 
 # Run application
-CMD ["sh", "-c", "flask", "run", "--app=app", "--host=$HOST", "--port=$PORT"]
+
+RUN chmod 777 start.sh
+CMD ./start.sh

@@ -3,17 +3,17 @@ import math
 import numpy as np
 
 
-class Point:
-    """
-    2D point
-    """
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __repr__(self):
-        return "Point({}, {})".format(self.x, self.y)
+# class Point:
+#     """
+#     2D point
+#     """
+#
+#     def __init__(self, x, y):
+#         self.x = x
+#         self.y = y
+#
+#     def __repr__(self):
+#         return "Point({}, {})".format(self.x, self.y)
 
 
 class Rect:
@@ -33,10 +33,30 @@ class Rect:
         return "Rect({}, {}, {}, {})".format(self.x, self.y, self.w, self.h)
 
 
+def crop(image: np.ndarray, x: int, y: int, w: int, h: int):
+    """
+    :param image: cv2 image
+    :param x: top left x
+    :param y: top left y
+    :param w: crop width
+    :param h: crop height
+    :return: cropped image
+    """
+    cropped = image.copy()
+    cropped = cropped[y: y + h, x: x + w]
+    return cropped
+
+
 def distance(pt1, pt2):
+    """
+    :param pt1: first point: tuple(x, y)
+    :param pt2: second point: tuple(x, y)
+    :return: distance between pt1 and pt2
+    """
     x1, y1 = pt1
     x2, y2 = pt2
     return math.sqrt(math.pow(x1 - x2, 2) + math.pow(y1 - y2, 2))
+
 
 #
 # def get_edges(image: np.array):

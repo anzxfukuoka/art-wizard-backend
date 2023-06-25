@@ -1,11 +1,15 @@
 from flask import Flask
 import logging
 from app import create_app
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 flask_app = create_app()
 
-logging.basicConfig(filename='logs.log', level=logging.DEBUG,
-                    format=f'%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s')
+#logging.basicConfig(filename='logs.log', level=logging.DEBUG,
+#                    format=f'%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s')
 
 
 @flask_app.route("/")
@@ -14,4 +18,7 @@ def hello_world():
 
 
 if __name__ == '__main__':
-    flask_app.run(debug=True, static_url_path='app/image_analyzer/data')
+    HOST = os.environ.get('HOST')
+    PORT = os.environ.get('PORT')
+
+    flask_app.run(host=HOST, port=PORT) # debug=True

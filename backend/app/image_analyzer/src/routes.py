@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 
 from app.image_analyzer import bp
-from app.image_analyzer.src.image_processing import extract_art_data
+from app.image_analyzer.src.image_processing import ArtExtractor
 
 LOG = logging.getLogger(__name__)
 
@@ -22,12 +22,12 @@ def get_art_data():
     # decode image
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    # do some fancy processing here....
-    result = extract_art_data(img)
+    #
+    extractor = ArtExtractor()
+    result = extractor.art_from_image(img)
 
     # build a response dict to send back to client
-    response = {'message': 'image processed. result={}'.format(result)
-                }
+    response = {'message': 'image processed', 'result': result}
     # encode response using jsonpickle
     response_pickled = jsonpickle.encode(response)
 
