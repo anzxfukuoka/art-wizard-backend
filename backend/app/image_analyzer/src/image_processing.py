@@ -23,9 +23,13 @@ class ArtExtractor:
         self.image_size = 640
         self.star_template_size = 32
 
+        data_folder = os.path.join(os.path.dirname(image_analyzer.__file__), "./data/")
+
+        # load EAST in Network
+        self.EASTnet = cv2.dnn.readNet(os.path.join(data_folder, 'frozen_east_text_detection.pb'))
+
         # load templates
-        data_folder = os.path.dirname(image_analyzer.__file__)
-        self.star_template = cv2.imread(os.path.join(data_folder, './data/star_template.png'), cv2.IMREAD_COLOR)
+        self.star_template = cv2.imread(os.path.join(data_folder, 'star_template.png'), cv2.IMREAD_COLOR)
 
         # templates preprocessing
         self.star_template = self._preprocess_image(self.star_template, self.star_template_size)
@@ -50,22 +54,49 @@ class ArtExtractor:
 
         star_x, star_y, star_xw, star_yh = found_stars[0]
 
-        # orig_h, orig_w, orig_channels = tst_image.shape
-
         image_x, image_y = (0, 0)
-        image_h, image_w = preprocessed_image.shape
+        image_h, image_w = preprocessed_image.shape[:2]
 
         image_crop_upper = crop(preprocessed_image, image_x, image_y, image_w, star_y)
         image_crop_middle = crop(preprocessed_image, image_x, star_y, image_w, star_yh - star_y)
         image_crop_lower = crop(preprocessed_image, image_x, star_yh, image_w, image_h - star_yh)
 
+        # Text recognition
+
+        image_crop_upper = resize_fill(image_crop_upper, (self.image_size, self.image_size))
+        image_crop_lower = resize_fill(image_crop_lower, (self.image_size, self.image_size))
+
+        # show the output image
+        cv2.imshow("", image_crop_lower)
+        cv2.waitKey(0)
+
+        bounds = self._find_text_bounds(image_crop_lower)
+
+        # loop over the bounding boxes
+        for (startX, startY, endX, endY) in bounds:
+            # scale the bounding box coordinates based on the respective
+            # ratios
+            startX = int(startX)
+            startY = int(startY)
+            endX = int(endX)
+            endY = int(endY)
+
+            # draw the bounding box on the image
+            cv2.rectangle(image_crop_lower, (startX, startY), (endX, endY), (255, 255, 255), 2)
+
+        # show the output image
+        cv2.imshow("", image_crop_lower)
+        cv2.waitKey(0)
+
         return None
 
-    def _preprocess_image(self, image: np.ndarray, image_size):
+    def _preprocess_image(self, image: np.ndarray, image_size, brightness=-60, contrast=1.5):
 
-        resized = resize_image(image, (image_size, image_size))
-        grayscale = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(grayscale, (3, 3), 0)
+        adjusted = cv2.convertScaleAbs(image, alpha=contrast, beta=brightness)
+
+        resized = resize_fill(adjusted, (image_size, image_size))
+        #grayscale = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(resized, (3, 3), 0)
 
         return blur
 
@@ -82,7 +113,7 @@ class ArtExtractor:
         # Select rectangles with
         # confidence greater than threshold
         (y_points, x_points) = np.where(match >= detection_threshold)
-        W, H = template.shape
+        W, H = template.shape[:2]
 
         # initialize our list of bounding boxes
         boxes = list()
@@ -107,6 +138,71 @@ class ArtExtractor:
                           (255, 0, 0), 3)
         
         '''
+
+        return boxes
+
+    def _find_text_bounds(self, image: np.ndarray):
+        # Create Blob from Image
+        (H, W) = image.shape[:2]
+        blob = cv2.dnn.blobFromImage(image, 1.0, (W, H),
+                                     (123.68, 116.78, 103.94), swapRB=True, crop=False)
+
+        # Add layers for network
+        outputLayers = []
+        outputLayers.append("feature_fusion/Conv_7/Sigmoid")
+        outputLayers.append("feature_fusion/concat_3")
+
+        # Pass Input to Network and get the Ouput based on layers
+        self.EASTnet.setInput(blob)
+        scores, geometry = self.EASTnet.forward(outputLayers)
+
+        # Get rects and confidence score for bounding boxes
+        (numRows, numCols) = scores.shape[2:4]
+        rects = []
+        confidences = []
+
+        for y in range(0, numRows):
+            scoresData = scores[0, 0, y]
+            xData0 = geometry[0, 0, y]
+            xData1 = geometry[0, 1, y]
+            xData2 = geometry[0, 2, y]
+            xData3 = geometry[0, 3, y]
+            anglesData = geometry[0, 4, y]
+
+            for x in range(0, numCols):
+                # if our score does not have sufficient probability, ignore it
+                if scoresData[x] < 0.5:
+                    continue
+
+                # compute the offset factor as our resulting feature maps will
+                # be 4x smaller than the input image
+                (offsetX, offsetY) = (x * 4.0, y * 4.0)
+
+                # extract the rotation angle for the prediction and then
+                # compute the sin and cosine
+                angle = anglesData[x]
+                cos = np.cos(angle)
+                sin = np.sin(angle)
+
+                # use the geometry volume to derive the width and height of
+                # the bounding box
+                h = xData0[x] + xData2[x]
+                w = xData1[x] + xData3[x]
+
+                # compute both the starting and ending (x, y)-coordinates for
+                # the text prediction bounding box
+                endX = int(offsetX + (cos * xData1[x]) + (sin * xData2[x]))
+                endY = int(offsetY - (sin * xData1[x]) + (cos * xData2[x]))
+                startX = int(endX - w)
+                startY = int(endY - h)
+
+                # add the bounding box coordinates and probability score to
+                # our respective lists
+                rects.append((startX, startY, endX, endY))
+                confidences.append(scoresData[x])
+
+        # apply non-maxima suppression to suppress weak, overlapping bounding
+        boxes = non_max_suppression(np.array(rects), probs=confidences)
 
         return boxes
 

@@ -69,7 +69,7 @@ def distance(pt1, pt2):
 #     return image_edges
 
 
-def resize_image(image: np.ndarray, size: tuple):
+def resize_fill(image: np.ndarray, size: tuple):
     """
     :param image: cv2 image
     :param size: tuple(image width, image height)
